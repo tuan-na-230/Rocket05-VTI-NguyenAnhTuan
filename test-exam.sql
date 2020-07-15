@@ -10,11 +10,12 @@ ORDER BY 	buyest ASC;
 -- C) Viết hàm (không có parameter) trả về tên hãng sản xuất đã bán được nhiều oto nhất trong năm nay.
 DELIMITER $$
 CREATE FUNCTION F_Buyest () 
-RETURNS VARCHAR(50)
+RETURNS VARCHAR(50)	
+READS SQL DATA
+DETERMINISTIC
 BEGIN
-
-	SET result = 
-		(SELECT car.Maker
+	DECLARE result VARCHAR(50);
+    SELECT car.Maker INTO result
 		FROM car
 		WHERE car.CarID = 
 			(SELECT count_table_1.CarID
@@ -33,7 +34,8 @@ BEGIN
 						LEFT JOIN car c
 						ON co.CarID = c.CarID
 						GROUP BY c.CarID
-						) AS count_table)) AS count_table_1));
+						) AS count_table)) AS count_table_1);
+		RETURN result;
 	END $$
 DELIMITER ;
 
@@ -90,13 +92,14 @@ BEGIN
 END $$
 DELIMITER ;
 
+
 -- 5) Viết trigger để tránh trường hợp người dụng nhập thông tin không hợp lệ vào database (DeliveryDate < OrderDate + 15).
 DELIMITER $$
 CREATE TRIGGER T_check 
 AFTER INSERT ON car_order
 FOR EACH ROW 
 BEGIN
-	IF DATEDIFF(NEW.DeliveryDate - NEW.OrderDate) < 15 THEN
+	IF DATEDIFF(NEW.DeliveryDate, NEW.OrderDate) < 15 THEN
 		SIGNAL SQLSTATE '11111'
         SET MESSAGE_TEXT = 'Không thể INSERT';
 	END IF;
