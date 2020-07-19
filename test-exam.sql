@@ -8,36 +8,40 @@ GROUP BY 	c.CustomerID
 ORDER BY 	buyest ASC;
 
 -- C) Viết hàm (không có parameter) trả về tên hãng sản xuất đã bán được nhiều oto nhất trong năm nay.
+DROP FUNCTION F_Buyest;
+
 DELIMITER $$
-CREATE FUNCTION F_Buyest () 
-RETURNS VARCHAR(50)	
+CREATE FUNCTION F_Buyest ()
+RETURNS VARCHAR(50)
 READS SQL DATA
 DETERMINISTIC
 BEGIN
 	DECLARE result VARCHAR(50);
-    SELECT car.Maker INTO result
-		FROM car
-		WHERE car.CarID = 
-			(SELECT count_table_1.CarID
-			FROM
-				(SELECT c1.CarID, count(*) AS resultCount1
-				FROM car_order co1
-				LEFT JOIN car c1
-				ON co1.CarID = c1.CarID
-				GROUP BY c1.CarID 
-				having resultCount1 = 
-					(SELECT max(count_table.resultCount)
-					FROM
-						(
-						SELECT c.CarID, count(*) AS resultCount
-						FROM car_order co
-						LEFT JOIN car c
-						ON co.CarID = c.CarID
-						GROUP BY c.CarID
-						) AS count_table)) AS count_table_1);
-		RETURN result;
-	END $$
+
+    WITH 
+		table_count (Maker, so_luong_ban)
+		AS 
+		(	
+			SELECT 		c.Maker, sum(Amount) AS so_luong_ban
+			FROM 		car c
+			JOIN 		car_order co
+			ON 			c.CarID = co.CarID
+			WHERE		YEAR(co.DeliveryDate) = 2000
+			GROUP BY 	c.Maker
+			ORDER BY 	so_luong_ban DESC
+		)
+        
+    SELECT 		table_count.Maker INTO result
+	FROM 		table_count
+    WHERE 		table_count.so_luong_ban = 
+					(SELECT max(so_luong_ban)
+					FROM 	table_count);
+	
+    RETURN result;
+END $$
 DELIMITER ;
+
+SELECT F_Buyest();
 
 -- C) Viết 1 thủ tục (không có parameter) để xóa các đơn hàng đã bị hủy của những năm trước. In ra số lượng bản ghi đã bị xóa.
 DELIMITER $$ 
@@ -50,9 +54,12 @@ BEGIN
     SET length_del = 
 		(SELECT count_table.number
 		FROM
-			(SELECT c.CarID, count(*) AS number
-			FROM car_order c
-			WHERE staus = 2) AS count_table);
+			(SELECT co.CarID, count(*) AS number
+			FROM 	car_order co
+			WHERE 	staus = 2 
+					AND 
+					YEAR(co.OrderDate) <> YEAR(NOW()) AS count_table);
+                    
 	loop_del: LOOP
 		IF run_var = length_del THEN
 			LEAVE loop_del;
@@ -77,23 +84,27 @@ BEGIN
 END $$
 DELIMITER ;
 
+select * from car_order;
+
 -- D) Viết 1 thủ tục (có CustomerID parameter) để in ra thông tin của các đơn
 -- hàng đã đặt hàng bao gồm: tên của khách hàng, mã đơn hàng, số lượng oto và tên hãng sản xuất
+DROP PROCEDURE P_order_info;
 DELIMITER $$ 
-CREATE PROCEDURE P_Order_info (IN InCustomerID INT)
+CREATE PROCEDURE P_order_info (IN InCustomerID INT)
 BEGIN
-	SELECT c.`Name`, co.OrderID, co.Amount, car.Model
-	FROM car_order co
-	LEFT JOIN customer c
-	ON co.CustomerID = c.CustomerID
-	LEFT JOIN car
-	ON co.CarID = car.CarID
-	WHERE c.CustomerID = InCustomerID;
+	SELECT 		c.`Name`, co.OrderID, co.Amount, car.Maker
+	FROM 		car_order co
+	LEFT JOIN 	customer c
+	ON 			co.CustomerID = c.CustomerID
+	LEFT JOIN 	car
+	ON 			co.CarID = car.CarID
+	WHERE 		c.CustomerID = InCustomerID AND co.staus = 0;
 END $$
 DELIMITER ;
 
+call P_order_info (1);
 
--- 5) Viết trigger để tránh trường hợp người dụng nhập thông tin không hợp lệ vào database (DeliveryDate < OrderDate + 15).
+-- e) Viết trigger để tránh trường hợp người dụng nhập thông tin không hợp lệ vào database (DeliveryDate < OrderDate + 15).
 DELIMITER $$
 CREATE TRIGGER T_check 
 AFTER INSERT ON car_order
